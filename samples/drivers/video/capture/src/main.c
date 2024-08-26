@@ -22,11 +22,6 @@ static inline int display_setup(const struct device *const display_dev, const ui
 	struct display_capabilities capabilities;
 	int ret = 0;
 
-	if (!device_is_ready(display_dev)) {
-		LOG_ERR("Device %s not found", display_dev->name);
-		return -ENODEV;
-	}
-
 	printk("\nDisplay device: %s\n", display_dev->name);
 
 	display_get_capabilities(display_dev, &capabilities);
@@ -41,7 +36,7 @@ static inline int display_setup(const struct device *const display_dev, const ui
 	/* Set display pixel format to match the one in use by the camera */
 	switch (pixfmt) {
 	case VIDEO_PIX_FMT_RGB565:
-		ret = display_set_pixel_format(display_dev, PIXEL_FORMAT_BGR_565);
+		ret = display_set_pixel_format(display_dev, PIXEL_FORMAT_RGB_565);
 		break;
 	case VIDEO_PIX_FMT_XRGB32:
 		ret = display_set_pixel_format(display_dev, PIXEL_FORMAT_ARGB_8888);
@@ -125,9 +120,44 @@ int main(void)
 		return 0;
 	}
 
-	printk("- Default format: %c%c%c%c %ux%u\n", (char)fmt.pixelformat,
+	if (CONFIG_VIDEO_FORMAT_HEIGHT) {
+		fmt.height = CONFIG_VIDEO_FORMAT_HEIGHT;
+	}
+
+	if (CONFIG_VIDEO_FORMAT_WIDTH) {
+		fmt.width = CONFIG_VIDEO_FORMAT_WIDTH;
+		fmt.pitch = fmt.width * 2;
+	}
+
+
+#if defined(CONFIG_VIDEO_PIXEL_FORMAT_BGGR8)
+	fmt.pixelformat = VIDEO_PIX_FMT_BGGR8;
+#elif defined(CONFIG_VIDEO_PIXEL_FORMAT_GBRG8)
+	fmt.pixelformat = VIDEO_PIX_FMT_GBRG8;
+#elif defined(CONFIG_VIDEO_PIXEL_FORMAT_GRBG8)
+	fmt.pixelformat = VIDEO_PIX_FMT_GRBG8;
+#elif defined(CONFIG_VIDEO_PIXEL_FORMAT_RGGB8)
+	fmt.pixelformat = VIDEO_PIX_FMT_RGGB8;
+#elif defined(CONFIG_VIDEO_PIXEL_FORMAT_RGB565)
+	fmt.pixelformat = VIDEO_PIX_FMT_RGB565;
+#elif defined(CONFIG_VIDEO_PIXEL_FORMAT_XRGB32)
+	fmt.pixelformat = VIDEO_PIX_FMT_XRGB32;
+#elif defined(CONFIG_VIDEO_PIXEL_FORMAT_YUYV)
+	fmt.pixelformat = VIDEO_PIX_FMT_YUYV;
+#elif defined(CONFIG_VIDEO_PIXEL_FORMAT_XYUV32)
+	fmt.pixelformat = VIDEO_PIX_FMT_XYUV32;
+#elif defined(CONFIG_VIDEO_PIXEL_FORMAT_JPEG)
+	fmt.pixelformat = VIDEO_PIX_FMT_JPEG;
+#endif
+
+	printk("- Video format: %c%c%c%c %ux%u\n", (char)fmt.pixelformat,
 	       (char)(fmt.pixelformat >> 8), (char)(fmt.pixelformat >> 16),
 	       (char)(fmt.pixelformat >> 24), fmt.width, fmt.height);
+
+	if (video_set_format(video_dev, VIDEO_EP_OUT, &fmt)) {
+		LOG_ERR("Unable to set format");
+		return 0;
+	}
 
 #if DT_HAS_CHOSEN(zephyr_display)
 	const struct device *const display_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_display));

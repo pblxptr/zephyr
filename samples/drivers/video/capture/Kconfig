@@ -1,0 +1,55 @@
+mainmenu "Video capture sample application"
+
+menu "Video capture configuration"
+
+config VIDEO_FORMAT_HEIGHT
+	int "Height of the video format"
+	default 0
+	help
+	  Height of the video format. If set to 0, the default height is used.
+
+config VIDEO_FORMAT_WIDTH
+	int "Width of the video format"
+	default 0
+	help
+	  Width of the video format. If set to 0, the default width is used.
+
+choice VIDEO_PIXEL_FORMAT
+	prompt "Pixel format of the video format"
+	default VIDEO_PIXEL_FORMAT_DEFAULT
+
+	config VIDEO_PIXEL_FORMAT_DEFAULT
+		bool "Default"
+
+	config VIDEO_PIXEL_FORMAT_BGGR8
+		bool "BGGR8"
+
+	config VIDEO_PIXEL_FORMAT_GBRG8
+		bool "GBRG8"
+
+	config VIDEO_PIXEL_FORMAT_GRBG8
+		bool "GRBG8"
+
+	config VIDEO_PIXEL_FORMAT_RGGB8
+		bool "RGGB8"
+
+	config VIDEO_PIXEL_FORMAT_RGB565
+		bool "RGB565"
+
+	config VIDEO_PIXEL_FORMAT_XRGB32
+		bool "XRGB32"
+
+	config VIDEO_PIXEL_FORMAT_YUYV
+		bool "YUYV"
+
+	config VIDEO_PIXEL_FORMAT_XYUV32
+		bool "XYUV32"
+
+	config VIDEO_PIXEL_FORMAT_JPEG
+		bool "JPEG"
+
+endchoice
+
+endmenu
+
+source "Kconfig.zephyr"
