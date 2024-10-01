@@ -3,3 +3,6 @@ board:
   vendor: seeed
   socs:
   - name: esp32s3
+    variants:
+    - name: 'sense'
+      cpucluster: 'procpu'

@@ -215,7 +215,7 @@ int main(void)
 			return 0;
 		}
 
-		LOG_DBG("Got frame %u! size: %u; timestamp %u ms", frame++, vbuf->bytesused,
+		LOG_INF("Got frame %u! size: %u; timestamp %u ms", frame++, vbuf->bytesused,
 		       vbuf->timestamp);
 
 #if DT_HAS_CHOSEN(zephyr_display)
