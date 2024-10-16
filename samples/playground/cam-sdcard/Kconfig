@@ -1,0 +1,52 @@
+# Copyright (c) 2021 Nordic Semiconductor ASA
+# SPDX-License-Identifier: Apache-2.0
+#
+# This file is the application Kconfig entry point. All application Kconfig
+# options can be defined here or included via other application Kconfig files.
+# You can browse these options using the west targets menuconfig (terminal) or
+# guiconfig (GUI).
+
+# menu "Zephyr"
+# source "Kconfig.zephyr"
+# endmenu
+
+module = APP
+module-str = APP
+source "subsys/logging/Kconfig.template.log_config"
+
+mainmenu "Video capture sample application"
+
+menu "Video capture configuration"
+
+config VIDEO_FORMAT_HEIGHT
+	int "Height of the video format"
+	default 0
+	help
+	  Height of the video format. If set to 0, the default height is used.
+
+config VIDEO_FORMAT_WIDTH
+	int "Width of the video format"
+	default 0
+	help
+	  Width of the video format. If set to 0, the default width is used.
+
+config VIDEO_PIXEL_FORMAT
+	string "Pixel format of the video format"
+	help
+	  Pixel format of the video format. If not set, the default pixel format is used.
+
+# config HEAP_MEM_POOL_ADD_SIZE_BOARD
+# 	int
+# 	default 8192
+
+config HEAP_MEM_POOL_ADD_SIZE_BOARD
+	int
+	default 65535 if WIFI && BT
+	default 65535 if WIFI
+	default 40960 if BT
+	default 4096
+
+endmenu
+
+source "Kconfig.zephyr"
+
