@@ -1,0 +1,13 @@
+# Copyright (c) 2024 Patryk Biel
+# SPDX-License-Identifier: Apache-2.0
+
+include: sensor-device.yaml
+
+properties:
+  int1-gpios:
+    type: phandle-array
+    description: |
+      The INT1 signal defaults to active high as produced by the
+      sensor.  The property value should ensure the flags properly
+      describe the signal that is presented to the driver.
+      The INT2 signal is not supported.

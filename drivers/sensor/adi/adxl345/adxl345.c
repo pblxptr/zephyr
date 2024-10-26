@@ -85,13 +85,12 @@ static inline int adxl345_reg_read(const struct device *dev, uint8_t addr, uint8
 	return adxl345_reg_access(dev, ADXL345_READ_CMD, addr, data, len);
 }
 
-static inline int adxl345_reg_write_byte(const struct device *dev, uint8_t addr, uint8_t val)
+int adxl345_reg_write_byte(const struct device *dev, uint8_t addr, uint8_t val)
 {
 	return adxl345_reg_write(dev, addr, &val, 1);
 }
 
-static inline int adxl345_reg_read_byte(const struct device *dev, uint8_t addr, uint8_t *buf)
-
+int adxl345_reg_read_byte(const struct device *dev, uint8_t addr, uint8_t *buf)
 {
 	return adxl345_reg_read(dev, addr, buf, 1);
 }
@@ -127,6 +126,94 @@ static int adxl345_read_sample(const struct device *dev,
 	return 0;
 }
 
+static uint8_t adxl345_convert_threshold(int threashold)
+{
+	unsigned int res = ((float)threashold) / (float)62.5;
+
+	return MIN(res, 255);
+}
+
+static int adxl345_convert_axes(char *axes, uint8_t *axes_out)
+{
+	for (; *axes != '\0'; axes++) {
+		switch (*axes) {
+			case 'x':
+				*axes_out |= 4;
+				break;
+			case 'y':
+				*axes_out |= 2;
+				break;
+			case 'z':
+				*axes_out |= 1;
+				break;
+			default:
+				return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+static void dump_register(const struct device *dev, uint8_t reg, const char *txt)
+{
+	int rc;
+	uint8_t val;
+	rc = adxl345_reg_read_byte(dev, reg, &val);
+	if (rc) {
+		LOG_ERR("Errror while reading a reg");
+	}
+
+	LOG_INF("Dump of %s %u : %u", txt == NULL ? "" : txt, reg, val);
+}
+
+static int adxl345_set_act_inact_ctl(const struct device *dev)
+{
+	int rc;
+	uint8_t reg = 0;
+
+	rc = adxl345_convert_axes(CONFIG_ADXL345_ACTIVITY_AXES, &reg);
+	if (rc < 0)
+		return rc;
+
+	reg = reg << 4;
+
+	rc = adxl345_convert_axes(CONFIG_ADXL345_INACTIVITY_AXES, &reg);
+	if (rc < 0)
+		return rc;
+
+	if (CONFIG_ADXL345_ACT_ABS_REF_MODE)
+		reg |= BIT(7);
+	
+	if (CONFIG_ADXL345_INACT_ABS_REF_MODE)
+		reg |= BIT(3);
+
+	return rc = adxl345_reg_write_byte(dev, ADXL345_ACT_INACT_CTL, reg);
+}
+
+#if defined(CONFIG_ADXL345_TRIGGER)
+static int adxl345_interrupt_config(const struct device *dev, const struct adxl345_dev_config *config)
+{
+	int rc;
+
+	rc = adxl345_reg_write_byte(dev, ADXL345_THRESH_ACT, adxl345_convert_threshold(CONFIG_ADXL345_ACTIVITY_THRESHOLD));
+	if (rc < 0)
+		return rc;
+
+	rc = adxl345_reg_write_byte(dev, ADXL345_THRESH_INACT, adxl345_convert_threshold(CONFIG_ADXL345_INACTIVITY_THRESHOLD));
+	if (rc < 0)
+		return rc;
+
+	rc = adxl345_set_act_inact_ctl(dev);
+	if (rc)
+		return rc;
+
+	rc = adxl345_reg_write_byte(dev, ADXL345_INT_MAP_REG, config->int_map_cfg);
+	if (rc < 0)
+		return rc;
+
+	return rc = adxl345_reg_write_byte(dev, ADXL345_INT_ENEABLE_REG, config->int_enable_cfg);
+}
+#endif
+
 static void adxl345_accel_convert(struct sensor_value *val, int16_t sample)
 {
 	if (sample & BIT(9)) {
@@ -160,6 +247,7 @@ static int adxl345_sample_fetch(const struct device *dev,
 			LOG_ERR("Failed to fetch sample rc=%d\n", rc);
 			return rc;
 		}
+		// LOG_INF("raw in driver ( x y z ) = ( %d %d %d )", sample.x, sample.y, sample.z);
 		data->bufx[s] = sample.x;
 		data->bufy[s] = sample.y;
 		data->bufz[s] = sample.z;
@@ -205,6 +293,9 @@ static int adxl345_channel_get(const struct device *dev,
 }
 
 static const struct sensor_driver_api adxl345_api_funcs = {
+#if defined(CONFIG_ADXL345_TRIGGER)
+	.trigger_set = adxl345_trigger_set,
+#endif
 	.sample_fetch = adxl345_sample_fetch,
 	.channel_get = adxl345_channel_get,
 };
@@ -213,6 +304,7 @@ static int adxl345_init(const struct device *dev)
 {
 	int rc;
 	struct adxl345_dev_data *data = dev->data;
+	const struct adxl345_dev_config *config = dev->config;
 	uint8_t dev_id;
 
 	data->sample_number = 0;
@@ -252,8 +344,31 @@ static int adxl345_init(const struct device *dev)
 		return -EIO;
 	}
 
+	dump_register(dev, 0x1E, "OFSX");
+	dump_register(dev, 0x1F, "OFSY");
+	dump_register(dev, 0x20, "OFSZ");
+
+	#if defined(CONFIG_ADXL345_TRIGGER)
+		if (config->interrupt.port) {
+			rc = adxl345_init_interrupt(dev);
+			if (rc < 0) {
+				LOG_ERR("Interrupt init failed");
+				return rc;
+			}
+			rc = adxl345_interrupt_config(dev, config);
+			if (rc < 0) {
+				LOG_ERR("Interrupt config failed");
+				return rc;
+			}
+		}
+	#endif
+
 	return 0;
 }
+
+#define ADXL345_TRIGGER_CFG(inst) \
+	IF_ENABLED(CONFIG_ADXL345_TRIGGER,						\
+		( .interrupt = GPIO_DT_SPEC_INST_GET_OR(inst, int1_gpios, { 0 }), ) ) \
 
 #define ADXL345_CONFIG_SPI(inst)                                       \
 	{                                                              \
@@ -265,6 +380,7 @@ static int adxl345_init(const struct device *dev)
 						    0)},               \
 		.bus_is_ready = adxl345_bus_is_ready_spi,              \
 		.reg_access = adxl345_reg_access_spi,                  \
+		ADXL345_TRIGGER_CFG(inst) \
 	}
 
 #define ADXL345_CONFIG_I2C(inst)			    \
@@ -272,12 +388,13 @@ static int adxl345_init(const struct device *dev)
 		.bus = {.i2c = I2C_DT_SPEC_INST_GET(inst)}, \
 		.bus_is_ready = adxl345_bus_is_ready_i2c,   \
 		.reg_access = adxl345_reg_access_i2c,	    \
+		ADXL345_TRIGGER_CFG(inst) \
 	}
 
 #define ADXL345_DEFINE(inst)								\
-	static struct adxl345_dev_data adxl345_data_##inst;				\
+	struct adxl345_dev_data adxl345_data_##inst;				\
 											\
-	static const struct adxl345_dev_config adxl345_config_##inst =                  \
+	const struct adxl345_dev_config adxl345_config_##inst =                  \
 		COND_CODE_1(DT_INST_ON_BUS(inst, spi), (ADXL345_CONFIG_SPI(inst)),      \
 			    (ADXL345_CONFIG_I2C(inst)));                                \
                                                                                         \
